@@ -8,16 +8,16 @@ from tempfile import TemporaryDirectory
 import sys
 from typing import Any
 from uuid import uuid4
+import locate
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from monkeypatching import (
-    _monkeypatching,
-    monkeypatch_module_object,
-    monkeypatch_setattr,
-    InMemoryModuleError,
-    NoPatchTargetsFoundError,
-)
+with locate.prepend_sys_path(".."):
+    from monkeypatching import (
+        _monkeypatching,
+        monkeypatch_module_object,
+        monkeypatch_setattr,
+        InMemoryModuleError,
+        NoPatchTargetsFoundError,
+    )
 
 
 # Your example package
@@ -166,11 +166,15 @@ class TestMonkeypatching(unittest.TestCase):
                 pass
 
     def test_in_memory_module_with_module_object(self):
-        def mock_sin(x):
+        import builtins
+
+        abs = builtins.abs
+
+        def mock_abs(x):
             return "mocked!"
 
         with self.assertRaises(InMemoryModuleError):
-            with monkeypatch_module_object(math, math.sin, mock_sin):
+            with monkeypatch_module_object(builtins, abs, mock_abs):
                 pass
 
 
