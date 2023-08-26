@@ -1,7 +1,6 @@
 import unittest
 import xml
 import math
-import locate
 from pathlib import Path
 from textwrap import dedent
 import os
@@ -10,14 +9,15 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-with locate.prepend_sys_path(".."):
-    from monkeypatching import (
-        _monkeypatching,
-        monkeypatch_module_object,
-        monkeypatch_setattr,
-        InMemoryModuleError,
-        NoPatchTargetsFoundError,
-    )
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from monkeypatching import (
+    _monkeypatching,
+    monkeypatch_module_object,
+    monkeypatch_setattr,
+    InMemoryModuleError,
+    NoPatchTargetsFoundError,
+)
 
 
 # Your example package
