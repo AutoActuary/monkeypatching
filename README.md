@@ -114,12 +114,12 @@ A context manager. Within a `with` block, `obj_original` gets temporarily replac
 #### Parameters
 
 * `module`: Target module.
-* `attr_name`: Attribute to be set via `setattr(attr_name, obj_replacement)`.
+* `attr_name`: Attribute to be set via `setattr(module, attr_name, obj_replacement)`.
 * `obj_replacement`: Replacement object.
 
 #### Returns
 
-A context manager. Within a `with` block, the specific attribute in the module is replaced by `obj_replacement`. Outside a `with` block, the replacement is permanent and identical to writing `setattr(attr_name, obj_replacement)`.
+A context manager. Within a `with` block, the specific attribute in the module is replaced by `obj_replacement`. Outside a `with` block, the replacement is permanent and identical to writing `setattr(module, attr_name, obj_replacement)`.
 
 ## Contributing
 
