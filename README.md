@@ -43,7 +43,8 @@ def mock_loads(data, *args, **kwargs):
     return {"mocked": True}
 
 with monkeypatch_setattr(json, "loads", mock_loads):
-    print(json.loads('{"key": "value"}'))  # Output: {"mocked": True}
+    print(json.loads('{"key": "value"}')) 
+    # Output: {"mocked": True}
 ```
 
 ### Temporary module patching
@@ -62,10 +63,14 @@ def mock_dumps(data, *args, **kwargs):
 # Monkeypatch json.dumps in the json module and submodules
 with monkeypatch_module_object(json, json.dumps, mock_dumps):
     print(json.dumps({"key": "value"}))  
-    # Output: "{\n    \"key\": \"value\"\n}"
+    # Output: 
+    # {
+    #     "key": "value"
+    # }
 
 # After the block, json.dumps reverts to its original
-print(json.dumps({"key": "value"}))  # Output: "{\"key\": \"value\"}"
+print(json.dumps({"key": "value"})) 
+# Output: {"key": "value"}
 ```
 
 ### Permanent module patching
@@ -78,7 +83,10 @@ import json
 
 monkeypatch_module_object(json, json.dumps, mock_dumps)
 print(json.dumps({"key": "value"}))  
-# Output: "{\n    \"key\": \"value\"\n}"
+# Output: 
+# {
+#     "key": "value"
+# }
 ```
 
 ### Caching
@@ -89,10 +97,36 @@ For repeated monkeypatching at identical locations:
 # With caching enabled
 with monkeypatch_module_object(json, json.dumps, mock_dumps, cached=True):
     print(json.dumps({"key": "value"}))  
-    # Output: "{\n    \"key\": \"value\"\n}"
+    # Output: 
+    # {
+    #     "key": "value"
+    # }"
 ```
 
 > **Caution**: Activate caching only if monkeypatch locations remain consistent and the object hasn't been replaced elsewhere.
+
+### Overriding globals during function call
+
+You can override global variables of a function during the execution of that function call.
+
+```python
+from monkeypatching import override_globals_during_function_call
+
+pi = 3
+
+class PretendModule:
+    @staticmethod
+    def get_tau():
+        return 2 * pi
+
+# Override 'pi' during a call to 'get_tau'
+with override_globals_during_function_call(PretendModule, 'get_tau', {'pi': 3.14159265358979}):
+    print(PretendModule.get_tau())
+    # Output: 6.28318530717958
+
+print(PretendModule.get_tau())
+# Output: 3
+```
 
 ## API documentation
 
@@ -120,6 +154,22 @@ A context manager. Within a `with` block, `obj_original` gets temporarily replac
 #### Returns
 
 A context manager. Within a `with` block, the specific attribute in the module is replaced by `obj_replacement`. Outside a `with` block, the replacement is permanent and identical to writing `setattr(module, attr_name, obj_replacement)`.
+
+
+### `override_globals_during_function_call(module, function_name, replacements, module_wide = False, module_wide_cached = False)`
+
+### Parameters
+
+* `module`: Target module.
+* `function_name`: The name of the function within the module.
+* `replacements`: A dictionary or object defining the global variables to be overridden.
+* `module_wide`: If set to True, the override acts as `monkeypatch_module_object`, otherwise as `monkeypatch_setattr`.
+* `module_wide_cached`: Whether to cache the monkeypatch locations; default is `False`.
+
+### Returns
+
+A context manager. Within a `with` block, `obj_original` gets temporarily replaced by `obj_replacement` across the specified `module` and submodules. Outside a `with` block, the replacement is permanent.
+
 
 ## Contributing
 
