@@ -158,7 +158,7 @@ A context manager. Within a `with` block, the specific attribute in the module i
 
 ### `override_globals_during_function_call(module, function_name, replacements, module_wide = False, module_wide_cached = False)`
 
-### Parameters
+#### Parameters
 
 * `module`: Target module.
 * `function_name`: The name of the function within the module.
@@ -166,7 +166,7 @@ A context manager. Within a `with` block, the specific attribute in the module i
 * `module_wide`: If set to True, the override acts as `monkeypatch_module_object`, otherwise as `monkeypatch_setattr`.
 * `module_wide_cached`: Whether to cache the monkeypatch locations; default is `False`.
 
-### Returns
+#### Returns
 
 A context manager. Within a `with` block, `obj_original` gets temporarily replaced by `obj_replacement` across the specified `module` and submodules. Outside a `with` block, the replacement is permanent.
 
