@@ -1,6 +1,6 @@
-from contextlib import contextmanager
-from typing import Dict, Tuple, List, Any, Iterator, Union
+from typing import Dict, Tuple, List, Any, Union, Callable, Mapping
 from pathlib import Path
+from types import SimpleNamespace
 
 
 def _is_subpath(child_path: Path, parent_path: Path) -> bool:
@@ -223,3 +223,133 @@ class monkeypatch_setattr:
 
     def __exit__(self, *args: Any) -> None:
         setattr(self._module, self._attr_name, self._obj_original)
+
+
+def _get_namespace_mapping(
+    namespace: Union[Mapping, SimpleNamespace, Any, None]
+) -> Dict:
+    """
+    Pass Mappings and dict through, and convert other namespace like objects to a
+    dictionary of its attributes.
+
+    Args:
+        namespace: The namespace to convert, which can be a mapping, a SimpleNamespace,
+        or any object that has a __dict__.
+
+    Returns:
+        A dictionary representation of the namespace.
+    """
+    if namespace is None:
+        return {}
+    elif isinstance(namespace, Mapping):
+        return dict(namespace)
+    else:
+        return vars(namespace)
+
+
+class CannotPatchGlobalsError(Exception):
+    pass
+
+
+class override_globals_during_function_call:
+    """
+    Temporarily overrides global variables of a function during the execution of that function
+    call, with options for doing this for each instance of the function across a module. This
+    functionality can be used as a context manager with a `with` statement or directly.
+
+    Args:
+        module: The module containing the function whose global variables are to be overridden during
+                    a function call.
+        function_name: The name of the function within the module for which the global variables
+                    are to be overridden.
+        replacements: A `Mapping`, or object with a `__dict__` attribute specifying the global variables
+                    to be overridden.
+        module_wide: If True, the replacement affects the module level globally, altering the function's
+                    behavior everywhere it is used within the module. If False, the replacement is applied
+                    only at that specific place in the module. See `monkeypatch_module_object` for a better
+                    understanding.
+        module_wide_cached: If True and `module_wide` is also True, caches all the locations where the original
+                            function is referenced for performance optimization. This should only be used if
+                            you're certain that the module's structure remain unchanged during the patch's
+                            lifetime. Default is False.
+
+    Raises:
+        CannotPatchGlobalsError: If the specified function does not have a `__globals__` attribute, indicating it
+                                cannot have its globals modified in this manner.
+
+    Example usage:
+        >>> pi = 3
+        >>> class PretendModule:
+        ...     @staticmethod
+        ...     def get_tau():
+        ...         return 2 * pi
+
+        >>> with override_globals_during_function_call(PretendModule, 'get_tau', {'pi': 3.14159265358979}):
+        ...     print(PretendModule.get_tau())
+        6.28318530717958
+
+        >>> print(PretendModule.get_tau())
+        6
+    """
+
+    def __init__(
+        self,
+        module: Any,
+        function_name: str,
+        replacements: Union[Mapping, SimpleNamespace, Any, None],
+        module_wide: bool = False,
+        module_wide_cached: bool = False,
+    ):
+
+        self.replacements = _get_namespace_mapping(replacements)
+        original_function = getattr(module, function_name)
+
+        if not hasattr(original_function, "__globals__"):
+            raise CannotPatchGlobalsError(
+                "Object does not have a '__globals__' attribute."
+            )
+
+        self.wrapper_function = self._create_wrapper_function(original_function)
+
+        self.monkeypatch_holder: Union[
+            None, monkeypatch_module_object, monkeypatch_setattr
+        ] = None
+
+        if module_wide:
+            self.monkeypatch_holder = monkeypatch_module_object(
+                module,
+                original_function,
+                self.wrapper_function,
+                cached=module_wide_cached,
+            )
+        else:
+            self.monkeypatch_holder = monkeypatch_setattr(
+                module, function_name, self.wrapper_function
+            )
+
+    def _create_wrapper_function(self, func: Callable):
+        def wrapper(*args, **kwargs):
+            NOVALUE = object()
+            glob = func.__globals__
+            reps = self.replacements
+            diff = {key: glob.get(key, NOVALUE) for key in reps}
+
+            glob.update(reps)
+
+            try:
+                return func(*args, **kwargs)
+            finally:
+                for key, val in diff.items():
+                    if val is NOVALUE:
+                        glob.pop(key, None)
+                    else:
+                        glob[key] = val
+
+        return wrapper
+
+    def __enter__(self):
+        self.monkeypatch_holder.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.monkeypatch_holder.__exit__(exc_type, exc_val, exc_tb)

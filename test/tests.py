@@ -9,15 +9,24 @@ import sys
 from typing import Any
 from uuid import uuid4
 import locate
+import doctest
 
 with locate.prepend_sys_path(".."):
     from monkeypatching import (
         _monkeypatching,
         monkeypatch_module_object,
         monkeypatch_setattr,
+        override_globals_during_function_call,
         InMemoryModuleError,
         NoPatchTargetsFoundError,
+        CannotPatchGlobalsError,
     )
+
+
+def load_tests(loader, tests, ignore):
+    # Add doctests from your_module
+    tests.addTests(doctest.DocTestSuite(_monkeypatching))
+    return tests
 
 
 # Your example package
@@ -175,6 +184,95 @@ class TestMonkeypatching(unittest.TestCase):
 
         with self.assertRaises(InMemoryModuleError):
             with monkeypatch_module_object(builtins, abs, mock_abs):
+                pass
+
+
+global_var = "original"
+
+
+class TestOverrideGlobalsDuringFunctionCall(unittest.TestCase):
+    def setUp(self):
+        # Create a temporary directory
+        self.temp_dir = TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+        # Path to the temporary module
+        example_module_path = Path(self.temp_dir.name) / "mock_module.py"
+        example_module_path.write_text(
+            dedent(
+                """
+                global_var = "original value"
+                
+                def use_global_var():
+                    return global_var
+                """
+            )
+        )
+        sys.path.insert(0, self.temp_dir.name)
+        d = {}
+        exec("import mock_module", d)
+        self.mock_module = d["mock_module"]
+
+    def test_override_global_var_in_function(self):
+        # Ensure the function returns the original global value
+        self.assertEqual(self.mock_module.use_global_var(), "original value")
+
+        # Use override_globals_during_function_call to temporarily override the global variable
+        with override_globals_during_function_call(
+            self.mock_module, "use_global_var", {"global_var": "patched value"}
+        ):
+            self.assertEqual(self.mock_module.use_global_var(), "patched value")
+
+        # Ensure the global variable is restored after the context manager
+        self.assertEqual(self.mock_module.use_global_var(), "original value")
+
+    def test_temporary_override_within_module(self):
+        # Define a mock module and function for testing
+        class MockModule:
+            @staticmethod
+            def test_func():
+                return global_var
+
+        # Verify initial behavior
+        self.assertEqual(MockModule.test_func(), "original")
+
+        # Apply override
+        with override_globals_during_function_call(
+            MockModule, "test_func", {"global_var": "temporarily overridden"}
+        ):
+            self.assertEqual(MockModule.test_func(), "temporarily overridden")
+
+        # Verify behavior is restored
+        self.assertEqual(MockModule.test_func(), "original")
+
+    def test_with_invalid_function_name(self):
+        # Attempt to override an undefined function
+        with self.assertRaises(AttributeError):
+            with override_globals_during_function_call(
+                self.mock_module, "undefined_function", {"global_var": "new value"}
+            ):
+                pass  # The function call is expected to raise AttributeError
+
+    def test_direct_application_without_context_manager(self):
+        # Directly apply the override without a context manager
+        patcher = override_globals_during_function_call(
+            self.mock_module, "use_global_var", {"global_var": "directly patched value"}
+        )
+        try:
+            self.assertEqual(
+                self.mock_module.use_global_var(), "directly patched value"
+            )
+        finally:
+            patcher.__exit__(None, None, None)
+
+        # Ensure the override is reverted
+        self.assertEqual(self.mock_module.use_global_var(), "original value")
+
+    def test_trigger_cannot_patch_globals_error_with_math_sin(self):
+        # Attempting to set 'pi' for 'math.sin' should trigger the error, since math.sin is not
+        # a pure python function.
+        with self.assertRaises(CannotPatchGlobalsError):
+            with override_globals_during_function_call(math, "sin", {"pi": 3.14}):
                 pass
 
 
